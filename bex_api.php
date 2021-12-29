@@ -4,7 +4,7 @@
     beA.expert BEA-API / EXPERIMENTAL
     ---------------------------------
     Demo script not intented for production
-    Version 1.1 / 09.09.2021
+    Version 1.2 / 29.12.2021
     (c) be next GmbH (Licence: GPL-2.0 & BSD-3-Clause)
     https://opensource.org/licenses/GPL-2.0
     https://opensource.org/licenses/BSD-3-Clause
@@ -49,6 +49,8 @@
         curl_setopt($curl_session, CURLOPT_RETURNTRANSFER, TRUE);
         curl_setopt($curl_session, CURLOPT_SSL_VERIFYPEER, false);
         curl_setopt($curl_session, CURLOPT_SSL_VERIFYHOST, false);
+        curl_setopt($curl_session, CURLOPT_FORBID_REUSE, true); // SSL pooling and reuse of connection explicitly disabled
+        curl_setopt($curl_session, CURLOPT_FRESH_CONNECT, true); // SSL pooling and reuse of connection explicitly disabled
         curl_setopt($curl_session, CURLOPT_POST, true);
         curl_setopt($curl_session, CURLOPT_CUSTOMREQUEST, "POST");
         curl_setopt($curl_session, CURLOPT_POSTFIELDS, 'j='.base64_encode($__req));
