@@ -562,6 +562,10 @@ function bea_get_message($token, $messageId, $sessionKey) {
         "token" => $array["token"]
     );
 
+    if(array_key_exists("vhn2attachments", $array)){
+        $res_dec["vhn2attachments"] = $array["vhn2attachments"];
+    }
+
     return $res_dec;
 }
 
@@ -1417,3 +1421,4 @@ function bea_init_message_draft($token, $messageId, $sessionKey) {
 
     return $res_dec;
 }
+
