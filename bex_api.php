@@ -4,7 +4,7 @@
     beA.expert BEA-API / EXPERIMENTAL
     ---------------------------------
     Demo script not intented for production
-    Version 1.2 / 29.12.2021
+    Version 1.3 / 13.12.2023
     (c) be next GmbH (Licence: GPL-2.0 & BSD-3-Clause)
     https://opensource.org/licenses/GPL-2.0
     https://opensource.org/licenses/BSD-3-Clause
@@ -1126,25 +1126,25 @@ function bea_init_message_draft($token, $messageId, $sessionKey) {
             $msg_infos->msg_text = "";
         }
 
-        if (isset($msg_draft["msg_infos"]["is_eeb"])){
+        if (isset($msg_draft["msg_infos"]["is_eeb"]) && is_bool($msg_draft["msg_infos"]["is_eeb"])){
             $msg_infos->is_eeb = $msg_draft["msg_infos"]["is_eeb"];
         }else{
             $msg_infos->is_eeb = false;
         }
 
-        if (isset($msg_draft["msg_infos"]["dringend"])){
+        if (isset($msg_draft["msg_infos"]["dringend"]) && is_bool($msg_draft["msg_infos"]["dringend"])){
             $msg_infos->dringend = $msg_draft["msg_infos"]["dringend"];
         }else{
             $msg_infos->dringend = false;
         }
 
-        if (isset($msg_draft["msg_infos"]["pruefen"])){
+        if (isset($msg_draft["msg_infos"]["pruefen"]) && is_bool($msg_draft["msg_infos"]["pruefen"])){
             $msg_infos->pruefen = $msg_draft["msg_infos"]["pruefen"];
         }else{
             $msg_infos->pruefen = false;
         }
 
-        if (isset($msg_draft["msg_infos"]["is_eeb_response"])){
+        if (isset($msg_draft["msg_infos"]["is_eeb_response"]) && is_bool($msg_draft["msg_infos"]["is_eeb_response"])){
             $msg_infos->is_eeb_response = $msg_draft["msg_infos"]["is_eeb_response"];
         }else{
             $msg_infos->is_eeb_response = false;
@@ -1168,19 +1168,19 @@ function bea_init_message_draft($token, $messageId, $sessionKey) {
             $msg_infos->verfahrensgegenstand = "";
         }
 
-        if (isset($msg_draft["msg_infos"]["eeb_erforderlich"])){
+        if (isset($msg_draft["msg_infos"]["eeb_erforderlich"]) && is_bool($msg_draft["msg_infos"]["eeb_erforderlich"])){
             $msg_infos->eeb_erforderlich = $msg_draft["msg_infos"]["eeb_erforderlich"];
         }else{
             $msg_infos->eeb_erforderlich = false;
         }
 
-        if (isset($msg_draft["msg_infos"]["eeb_accept"])){
+        if (isset($msg_draft["msg_infos"]["eeb_accept"]) && is_bool($msg_draft["msg_infos"]["eeb_accept"])){
             $msg_infos->eeb_accept = $msg_draft["msg_infos"]["eeb_accept"];
         }else{
             $msg_infos->eeb_accept = false;
         }
 
-        if (isset($msg_draft["msg_infos"]["xj"])){
+        if (isset($msg_draft["msg_infos"]["xj"]) && is_bool($msg_draft["msg_infos"]["xj"])){
             $msg_infos->xj = $msg_draft["msg_infos"]["xj"];
         }else{
             $msg_infos->xj = true;
@@ -1204,7 +1204,7 @@ function bea_init_message_draft($token, $messageId, $sessionKey) {
             $msg_infos->eeb_reject_grund = "";
         }
 
-        if (isset($msg_draft["msg_infos"]["xj_version3"])){
+        if (isset($msg_draft["msg_infos"]["xj_version3"]) && is_bool($msg_draft["msg_infos"]["xj_version3"])){
             $msg_infos->xj_version3 = $msg_draft["msg_infos"]["xj_version3"];
         }else{
             $msg_infos->xj_version3 = true;
@@ -1370,7 +1370,13 @@ function bea_init_message_draft($token, $messageId, $sessionKey) {
                             $msg_infos->is_eeb_response = $xj["is_eeb_response"];
                             $msg_infos->eeb_fremdid = $xj["fremdeNachrichtenID"];
                             $msg_infos->verfahrensgegenstand = $xj["verfahrensgegenstand"];
-                            $msg_infos->eeb_erforderlich = $xj["eeb_erforderlich"];
+                            
+                            if(is_bool($xj["eeb_erforderlich"])){
+                                $msg_infos->eeb_erforderlich = $xj["eeb_erforderlich"];
+                            }else{
+                                $msg_infos->eeb_erforderlich = False;
+                            }
+                            
                             $msg_infos->gericht_code = $xj["gericht_code"];
                         }
 
@@ -1421,4 +1427,3 @@ function bea_init_message_draft($token, $messageId, $sessionKey) {
 
     return $res_dec;
 }
-
