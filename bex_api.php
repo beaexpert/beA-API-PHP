@@ -4,7 +4,7 @@
     beA.expert BEA-API / EXPERIMENTAL
     ---------------------------------
     Demo script not intented for production
-    Version 1.3 / 13.12.2023
+    Version 1.4 / 11.03.2024
     (c) be next GmbH (Licence: GPL-2.0 & BSD-3-Clause)
     https://opensource.org/licenses/GPL-2.0
     https://opensource.org/licenses/BSD-3-Clause
@@ -1053,7 +1053,7 @@ function bea_send_message_validation($sessionKey, $message_validations_enc) {
 
             $tmp_arr = array(
                 "id" => $element["id"],
-                "data" => $dec_data,
+                "data" => base64_encode($dec_data),
             );
             array_push($dec_validations, $tmp_arr);
         }
