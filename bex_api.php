@@ -4,7 +4,7 @@
     beA.expert BEA-API / EXPERIMENTAL
     ---------------------------------
     Demo script not intented for production
-    Version 1.4 / 11.03.2024
+    Version 1.5 / 07.08.2024
     (c) be next GmbH (Licence: GPL-2.0 & BSD-3-Clause)
     https://opensource.org/licenses/GPL-2.0
     https://opensource.org/licenses/BSD-3-Clause
@@ -93,6 +93,151 @@ function send_request($__req, $__func) {
 
     return $result;
 }
+
+
+// Example usage
+/*
+try {
+    $p12Struct = [
+        "sw_token" => "path/to/your_certificate.p12",
+        "sw_pin" => "p12password",
+        "token_b64" => "" // Or base64 encoded string if available
+    ];
+
+    $challenge = "Your challenge message to sign";
+
+    $signature = signCmsCommandLineEdition($p12Struct, $challenge);
+    echo "Signature: " . $signature . "\n";
+} catch (Exception $e) {
+    echo "Error: " . $e->getMessage() . "\n";
+}
+*/
+function signCmsCommandLineEdition($p12Struct, $toSignChallenge, $pathToOpenssl = "") {
+    // Extract p12_struct values
+    $swToken = isset($p12Struct['sw_token']) ? $p12Struct['sw_token'] : '';
+    $swPin = isset($p12Struct['sw_pin']) ? $p12Struct['sw_pin'] : '';
+    $tokenB64 = isset($p12Struct['token_b64']) ? $p12Struct['token_b64'] : '';
+
+    // Determine the operating system
+    $isWindows = strtoupper(substr(PHP_OS, 0, 3)) === 'WIN';
+
+    // Define temporary directory
+    $tempDir = sys_get_temp_dir();
+
+    $tempDir = $tempDir . DIRECTORY_SEPARATOR . "bex_php_cms_signer_temp" . DIRECTORY_SEPARATOR;
+    if (file_exists($tempDir)) {
+        array_map('unlink', glob("$tempDir*.*"));
+        rmdir($tempDir);
+    }
+    mkdir($tempDir, 0777, true);
+
+    // Save P12 token to temp if provided as base64
+    if ($tokenB64 !== '') {
+        $userP12File = $tempDir . "x.p12";
+        $tokenRaw = base64_decode($tokenB64);
+        file_put_contents($userP12File, $tokenRaw);
+    } else {
+        $userP12File = $swToken;
+    }
+
+    // Convert P12 to PEM
+    $tmpPemFile = $tempDir . "x.pem";
+    convertP12ToPem($userP12File, $tmpPemFile, $swPin);
+
+    // Write the challenge to a temporary file
+    $challengeTxtFile = $tempDir . "challenge.txt";
+    file_put_contents($challengeTxtFile, $toSignChallenge);
+
+    // Define the signature output file
+    $signatureP7mFile = $tempDir . "response.p7m";
+
+    // Define OpenSSL executable
+    $opensslExe = $isWindows ? "openssl.exe" : "openssl";
+    if ($pathToOpenssl !== "") {
+        $opensslExe = $pathToOpenssl . DIRECTORY_SEPARATOR . $opensslExe;
+    }
+
+    // Execute the OpenSSL command to sign the message
+    $cmd = sprintf(
+        '%s cms -sign -in %s -out %s -signer %s -keyopt rsa_padding_mode:pss -keyopt rsa_pss_saltlen:32 -outform pem -md SHA256 -passin pass:%s',
+        escapeshellcmd($opensslExe),
+        escapeshellarg($challengeTxtFile),
+        escapeshellarg($signatureP7mFile),
+        escapeshellarg($tmpPemFile),
+        escapeshellarg($swPin)
+    );
+
+    exec($cmd, $output, $returnVar);
+
+    if ($returnVar !== 0) {
+        throw new Exception("OpenSSL command failed: " . implode("\n", $output));
+    }
+
+    // Read the signed response
+    $signatureUgly = file_get_contents($signatureP7mFile);
+
+    // Clean the signature
+    $signatureClean = str_replace(
+        ["-----BEGIN CMS-----", "-----END CMS-----", "\r", "\n"],
+        '',
+        $signatureUgly
+    );
+
+    // Cleanup the temporary directory
+    //array_map('unlink', glob("$tempDir*.*"));
+    //rmdir($tempDir);
+
+    // Return the signed value
+    return $signatureClean;
+}
+
+
+
+// Example usage:
+// convertP12ToPem('path/to/your_certificate.p12', 'path/to/your_certificate.pem', 'p12password');
+function convertP12ToPem($p12Path, $pemOutPath, $p12Password) {
+    // Load the contents of the .p12 file
+    $p12Contents = file_get_contents($p12Path);
+
+    // Parse the .p12 file to get the certificate and private key
+    $certs = [];
+    if (!openssl_pkcs12_read($p12Contents, $certs, $p12Password)) {
+        throw new Exception('Unable to read the .p12 file. Please check the file path and password.');
+    }
+
+    // Open the output .pem file
+    $pemFile = fopen($pemOutPath, 'wb');
+    if (!$pemFile) {
+        throw new Exception('Unable to open the output .pem file for writing.');
+    }
+
+    // Write the private key to the .pem file
+    if (isset($certs['pkey'])) {
+        fwrite($pemFile, $certs['pkey']);
+    } else {
+        throw new Exception('No private key found in the .p12 file.');
+    }
+
+    // Write the main certificate to the .pem file
+    if (isset($certs['cert'])) {
+        fwrite($pemFile, $certs['cert']);
+    } else {
+        throw new Exception('No certificate found in the .p12 file.');
+    }
+
+    // Write any additional certificates
+    if (isset($certs['extracerts']) && is_array($certs['extracerts'])) {
+        foreach ($certs['extracerts'] as $extraCert) {
+            fwrite($pemFile, $extraCert);
+        }
+    }
+
+    // Close the .pem file
+    fclose($pemFile);
+
+    echo "Conversion complete. The PEM file is saved as {$pemOutPath}\n";
+}
+
 
 
 function get_cert_file_values($file, $pass = '') {
@@ -200,7 +345,7 @@ function bea_login($cert_file, $cert_pin) {
     if ($debug) echo ("bea_login thumprint: $thumprint\n");
 
     $req["thumbprint"] = $thumprint;
-    $login_step1_json = send_request(json_encode($req, JSON_UNESCAPED_SLASHES), 'bea_login_step1');
+    $login_step1_json = send_request(json_encode($req, JSON_UNESCAPED_SLASHES), 'bex_login_step1');
 
     $login_step1 = json_decode($login_step1_json);
     
@@ -215,30 +360,54 @@ function bea_login($cert_file, $cert_pin) {
         echo ("\n");
     }
 
-    if (!openssl_sign(base64_decode($login_step1->{'challengeVal'}), $challenge_signed, $cert_info["pkey"], OPENSSL_ALGO_SHA256)) {
-        echo "Fehler: challengeVal kann nicht signiert werden.\n";
-        exit;
+
+    
+    $p12Struct = [
+        "sw_token" => $cert_file,
+        "sw_pin" => $cert_pin,
+        "token_b64" => ""
+    ];
+
+    // if (!openssl_sign(base64_decode($login_step1->{'challengeVal'}), $challenge_signed, $cert_info["pkey"], OPENSSL_ALGO_SHA256)) {
+    //     echo "Fehler: challengeVal kann nicht signiert werden.\n";
+    //     exit;
+    // }
+
+    try {
+        $challenge = $login_step1->{'challengeVal'};
+        $challenge_signed = signCmsCommandLineEdition($p12Struct, $challenge);
+        echo "Signature: " . $challenge_signed . "\n";
+    } catch (Exception $e) {
+        echo "Error: " . $e->getMessage() . "\n";
     }
 
-    if (!openssl_sign(base64_decode($login_step1->{'challengeValidation'}), $validation_signed, $cert_info["pkey"], OPENSSL_ALGO_SHA256)) {
-        echo "Fehler: challengeValidation kann nicht signiert werden.\n";
-        exit;
+    // if (!openssl_sign(base64_decode($login_step1->{'challengeValidation'}), $validation_signed, $cert_info["pkey"], OPENSSL_ALGO_SHA256)) {
+    //     echo "Fehler: challengeValidation kann nicht signiert werden.\n";
+    //     exit;
+    // }
+
+    try {
+        $challenge = $login_step1->{'challengeValidation'};
+        $validation_signed = signCmsCommandLineEdition($p12Struct, $challenge);
+        echo "Signature: " . $validation_signed . "\n";
+    } catch (Exception $e) {
+        echo "Error: " . $e->getMessage() . "\n";
     }
 
-    return bea_login_step2($login_step1, $cert_info, $challenge_signed, $validation_signed);
+    return bex_login_step2($login_step1, $cert_info, $challenge_signed, $validation_signed);
 }
 
 
-function bea_login_step2($login_step1, $cert_info, $challenge_signed, $validation_signed) {
+function bex_login_step2($login_step1, $cert_info, $challenge_signed, $validation_signed) {
 
     global $debug;
 
     $req2["tokenPAOS"] = $login_step1->{'tokenPAOS'};
     $req2["userCert"] = base64_encode($cert_info["cert"]);
-    $req2["challengeSigned"] = base64_encode($challenge_signed);
-    $req2["validationSigned"] = base64_encode($validation_signed);
+    $req2["challengeSigned"] = $challenge_signed;
+    $req2["validationSigned"] = $validation_signed;
 
-    $func2 = 'bea_login_step2';
+    $func2 = 'bex_login_step2';
     $login_step2_json = send_request(json_encode($req2, JSON_UNESCAPED_SLASHES), $func2);
 
     $login_step2 = json_decode($login_step2_json);
@@ -275,7 +444,7 @@ function bea_login_step2($login_step1, $cert_info, $challenge_signed, $validatio
         echo ("\n");
     }
 
-    $login_step3 = bea_login_step3($login_step2, $validationKey);
+    $login_step3 = bex_login_step3($login_step2, $validationKey);
     if ((!is_string($login_step3)) && (isset($login_step3["error"]))){
         return $login_step3;
     }
@@ -288,14 +457,14 @@ function bea_login_step2($login_step1, $cert_info, $challenge_signed, $validatio
 }
 
 
-function bea_login_step3($login_step2, $validationKey) {
+function bex_login_step3($login_step2, $validationKey) {
 
     global $debug;
 
     $req3["tokenValidation"] = $login_step2->{'tokenValidation'};
     $req3["validationKey"] = base64_encode($validationKey);
 
-    $func3 = 'bea_login_step3';
+    $func3 = 'bex_login_step3';
     $login_step3_json = send_request(json_encode($req3, JSON_UNESCAPED_SLASHES), $func3);
 
     $login_step3 = json_decode($login_step3_json);
