@@ -4,7 +4,7 @@
     beA.expert BEA-API / EXPERIMENTAL
     ---------------------------------
     Demo script not intented for production
-    Version 1.5 / 07.08.2024
+    Version 1.6 / 22.08.2024
     (c) be next GmbH (Licence: GPL-2.0 & BSD-3-Clause)
     https://opensource.org/licenses/GPL-2.0
     https://opensource.org/licenses/BSD-3-Clause
@@ -337,6 +337,128 @@ function bea_get_gericht_codes($token) {
 
 
 function bea_login($cert_file, $cert_pin) {
+    global $debug;
+
+    $cert_info = get_cert_file_values($cert_file, $cert_pin);
+    $thumprint = openssl_x509_fingerprint($cert_info["cert"], 'sha1', false);
+
+    if ($debug) echo ("bea_login thumprint: $thumprint\n");
+
+    $req["thumbprint"] = $thumprint;
+    $login_step1_json = send_request(json_encode($req, JSON_UNESCAPED_SLASHES), 'bea_login_step1');
+
+    $login_step1 = json_decode($login_step1_json);
+    
+    if (isset($login_step1->error)){
+        return $login_step1;
+    }
+
+    if ($debug) {
+        print $login_step1->{'challengeVal'};
+        echo ("\n");
+        print $login_step1->{'challengeValidation'};
+        echo ("\n");
+    }
+
+    if (!openssl_sign(base64_decode($login_step1->{'challengeVal'}), $challenge_signed, $cert_info["pkey"], OPENSSL_ALGO_SHA256)) {
+        echo "Fehler: challengeVal kann nicht signiert werden.\n";
+        exit;
+    }
+
+    if (!openssl_sign(base64_decode($login_step1->{'challengeValidation'}), $validation_signed, $cert_info["pkey"], OPENSSL_ALGO_SHA256)) {
+        echo "Fehler: challengeValidation kann nicht signiert werden.\n";
+        exit;
+    }
+
+    return bea_login_step2($login_step1, $cert_info, $challenge_signed, $validation_signed);
+}
+
+
+function bea_login_step2($login_step1, $cert_info, $challenge_signed, $validation_signed) {
+
+    global $debug;
+
+    $req2["tokenPAOS"] = $login_step1->{'tokenPAOS'};
+    $req2["userCert"] = base64_encode($cert_info["cert"]);
+    $req2["challengeSigned"] = base64_encode($challenge_signed);
+    $req2["validationSigned"] = base64_encode($validation_signed);
+
+    $func2 = 'bea_login_step2';
+    $login_step2_json = send_request(json_encode($req2, JSON_UNESCAPED_SLASHES), $func2);
+
+    $login_step2 = json_decode($login_step2_json);
+
+    if (isset($login_step2->error)){
+        return $login_step2;
+    }
+
+    if ($debug) {
+        print $login_step2->{'sessionKey'};
+        echo ("\n");
+        print $login_step2->{'validationKey'};
+        echo ("\n");
+    }
+
+    $rsa = new Crypt_RSA();
+    $rsa->loadKey($cert_info["pkey"], CRYPT_RSA_PRIVATE_FORMAT_PKCS1);
+    $rsa->setHash('sha256');
+    $rsa->setMGFHash('sha256');
+
+    $ciphertext = base64_decode($login_step2->{'sessionKey'});
+    $sessionKey = $rsa->decrypt($ciphertext);
+
+    if ($debug) {
+        echo base64_encode($sessionKey);
+        echo ("\n");
+    }
+
+    $ciphertext = base64_decode($login_step2->{'validationKey'});
+    $validationKey = $rsa->decrypt($ciphertext);
+
+    if ($debug) {
+        echo base64_encode($validationKey);
+        echo ("\n");
+    }
+
+    $login_step3 = bea_login_step3($login_step2, $validationKey);
+    if ((!is_string($login_step3)) && (isset($login_step3["error"]))){
+        return $login_step3;
+    }
+
+    $res["token"] = $login_step3;
+    $res["sessionKey"] = base64_encode($sessionKey);
+    $res["safeId"] = $login_step2->{'safeId'};
+
+    return $res;
+}
+
+
+function bea_login_step3($login_step2, $validationKey) {
+
+    global $debug;
+
+    $req3["tokenValidation"] = $login_step2->{'tokenValidation'};
+    $req3["validationKey"] = base64_encode($validationKey);
+
+    $func3 = 'bea_login_step3';
+    $login_step3_json = send_request(json_encode($req3, JSON_UNESCAPED_SLASHES), $func3);
+
+    $login_step3 = json_decode($login_step3_json);
+
+    if (isset($login_step3->error)){
+        return $login_step3;
+    }
+
+    if ($debug) {
+        print $login_step3->{'token'};
+        echo ("\n");
+    }
+
+    return $login_step3->{'token'};
+}
+
+
+function bex_login($cert_file, $cert_pin) {
     global $debug;
 
     $cert_info = get_cert_file_values($cert_file, $cert_pin);
